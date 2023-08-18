@@ -6,10 +6,7 @@ import rioxarray as rxr
 import gzip
 from tempfile import NamedTemporaryFile
 import numpy as np
-# from __future__ import division
-
-# NOTE: Make sure to crop the Xarray to the smallest rectangle before passing in 
-# (to be improved)
+import geopandas as gpd
 
 def spatial_ts(data_input, shapefile_path, variable_label=None, ids=None, method='mean', index_col='FNID', freq = 'D'):
     """
@@ -29,7 +26,8 @@ def spatial_ts(data_input, shapefile_path, variable_label=None, ids=None, method
     """
 
     # Load the shapefile with salem
-    shdf = salem.read_shapefile(shapefile_path)
+    # shdf = salem.read_shapefile(shapefile_path)
+    shdf = gpd.read_file(shapefile_path)# salem isn't compatible with GeoJSON files
 
     # If ids parameter is provided as a single string or integer, convert it to a list
     if isinstance(ids, (str, int)):
@@ -146,8 +144,16 @@ def aggregate_data(ds, shdf, method, index_col, variable_name=None):
         # Extract the specific shape for the current index value
         shape_idx = shdf[shdf[index_col] == idx_val]
 
+        # Crop the ds
+        cropped_ds = crop_ds(shape_idx, ds, spatial_dims)
+
+        # Check if the cropped dataset is empty
+        if cropped_ds.size == 0:
+            print(f"{idx_val} data is missing")
+            continue
+
         # Create a mask using salem
-        ds_roi = ds.salem.roi(shape=shape_idx)
+        ds_roi = cropped_ds.salem.roi(shape=shape_idx)
 
         # Aggregate the data values over time for the current index value based on the specified method
         if method == 'mean':
@@ -163,6 +169,11 @@ def aggregate_data(ds, shdf, method, index_col, variable_name=None):
 
     return aggregated_data_df
 
+def crop_ds(gdf, ds, spatial_dims):
+    # Calculate the total bounding box of all geometries
+    minx, miny, maxx, maxy = gdf.total_bounds
+    ds_cropped = ds.sel({spatial_dims[1]: slice(minx-.5, maxx+.5), spatial_dims[0]: slice(miny-.5, maxy+.5)})
+    return ds_cropped
 
 # Note: The function  supports both xarray datasets and paths to a folder with GeoTIFF files
 #       The variable_label parameter allows the specification of the variable to be aggregated

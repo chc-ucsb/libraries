@@ -8,6 +8,8 @@ from tempfile import NamedTemporaryFile
 import numpy as np
 import geopandas as gpd
 
+# from __future__ import division
+
 def spatial_ts(data_input, shapefile_path, variable_label=None, ids=None, method='mean', index_col='FNID', freq = 'D'):
     """
     Aggregate gridded data values from an xarray dataset or GeoTIFF files by a specified polygons in a shapefile using salem.
@@ -27,7 +29,7 @@ def spatial_ts(data_input, shapefile_path, variable_label=None, ids=None, method
 
     # Load the shapefile with salem
     # shdf = salem.read_shapefile(shapefile_path)
-    shdf = gpd.read_file(shapefile_path)# salem isn't compatible with GeoJSON files
+    shdf = gpd.read_file(shapefile_path)
 
     # If ids parameter is provided as a single string or integer, convert it to a list
     if isinstance(ids, (str, int)):
@@ -172,8 +174,17 @@ def aggregate_data(ds, shdf, method, index_col, variable_name=None):
 def crop_ds(gdf, ds, spatial_dims):
     # Calculate the total bounding box of all geometries
     minx, miny, maxx, maxy = gdf.total_bounds
-    ds_cropped = ds.sel({spatial_dims[1]: slice(minx-.5, maxx+.5), spatial_dims[0]: slice(miny-.5, maxy+.5)})
+
+    # Check the order of coordinates in the dataset
+    x_slice_order = (minx-.5, maxx+.5) if ds[spatial_dims[1]][0] < ds[spatial_dims[1]][-1] else (maxx+.5, minx-.5)
+    y_slice_order = (miny-.5, maxy+.5) if ds[spatial_dims[0]][0] < ds[spatial_dims[0]][-1] else (maxy+.5, miny-.5)
+
+    # Slice the dataset accordingly
+    ds_cropped = ds.sel({spatial_dims[1]: slice(*x_slice_order), spatial_dims[0]: slice(*y_slice_order)})
+    
     return ds_cropped
+
+
 
 # Note: The function  supports both xarray datasets and paths to a folder with GeoTIFF files
 #       The variable_label parameter allows the specification of the variable to be aggregated
